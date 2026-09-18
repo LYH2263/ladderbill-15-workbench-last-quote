@@ -4,6 +4,7 @@ from app.db import connect
 from app.engines.peak_compare import compare_plain_vs_peak
 from app.engines.tier_progressive import calc_bill
 from app.repositories import accounts as accounts_repo
+from app.repositories import last_calc as last_calc_repo
 from app.repositories import readings as readings_repo
 from app.repositories import runs as runs_repo
 from app.repositories import settings as settings_repo
@@ -45,6 +46,8 @@ class BillingService:
         tiers = tiers_repo.as_calc_rows(self._conn)
         pf = settings_repo.peak_factor(self._conn)
         factor = pf if peak else 1.0
+        # calc_bill raises ValueError on invalid input; abort before any write
+        # so a failed calc never overwrites the last successful summary.
         result = calc_bill(kwh, tiers, factor)
         run_id = None
         if persist:
@@ -55,6 +58,15 @@ class BillingService:
                 result,
                 account_id,
             )
+            if account_id is not None:
+                last_calc_repo.save(
+                    self._conn,
+                    account_id,
+                    kwh=kwh,
+                    peak=peak,
+                    total=result["total"],
+                    run_id=run_id,
+                )
         return {"run_id": run_id, **result}
 
     def run_compare(self, kwh: float, persist: bool):
@@ -68,6 +80,12 @@ class BillingService:
 
     def list_history(self, limit: int = 50):
         return runs_repo.list_recent(self._conn, limit)
+
+    def get_last_calc(self, account_id: int):
+        return last_calc_repo.get(self._conn, account_id)
+
+    def clear_last_calc(self, account_id: int) -> bool:
+        return last_calc_repo.delete(self._conn, account_id)
 
     def get_run(self, run_id: int):
         return runs_repo.get(self._conn, run_id)

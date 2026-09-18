@@ -4,6 +4,7 @@ from app.db import connect
 from app.engines.peak_compare import compare_plain_vs_peak
 from app.engines.tier_progressive import calc_bill
 from app.repositories import accounts as accounts_repo
+from app.repositories import last_success as last_success_repo
 from app.repositories import readings as readings_repo
 from app.repositories import runs as runs_repo
 from app.repositories import settings as settings_repo
@@ -55,7 +56,16 @@ class BillingService:
                 result,
                 account_id,
             )
+        if account_id is not None:
+            # 只在测算成功后落摘要；上面的 calc_bill 抛错时不会走到这里
+            last_success_repo.upsert(self._conn, account_id, kwh, peak, result["total"], run_id)
         return {"run_id": run_id, **result}
+
+    def get_last_success(self, account_id: int):
+        return last_success_repo.get(self._conn, account_id)
+
+    def clear_last_success(self, account_id: int):
+        last_success_repo.delete(self._conn, account_id)
 
     def run_compare(self, kwh: float, persist: bool):
         tiers = tiers_repo.as_calc_rows(self._conn)

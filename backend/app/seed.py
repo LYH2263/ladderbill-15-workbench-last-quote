@@ -22,6 +22,14 @@ def init_db():
         result_json TEXT,
         created_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS account_last_success(
+        account_id INTEGER PRIMARY KEY,
+        kwh REAL,
+        peak INTEGER,
+        total REAL,
+        run_id INTEGER,
+        success_at TEXT
+    );
     """
     )
     if conn.execute("SELECT COUNT(*) c FROM accounts").fetchone()["c"] == 0:
